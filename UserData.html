@@ -1,0 +1,189 @@
+<!-- 
+    UserData.html by Cmeans
+    简介: 一个简单的HTML页面，
+         左下角显示你的赛季平均完成时间，
+         右下角显示你的elo分和排名，
+         右侧一列显示你自从上次登录后最新10把排位模式的数据
+    创建日期: 2024.9.15
+    注意事项:
+      1. nickname: 你的游戏名
+      2. decimalPrecision: 显示时间的精度, 范围是0-3, 不要乱改
+      3. 使用方法与paceman基本相同, 在OBS内添加浏览器即可，宽度高度改成你OBS的基础（画布）分辨率
+         不要缩放，也不需要缩放，网页是分辨率自适应的
+      4. 早在7个月前Specnr就用Python的Request库写过类似的东西了, 也不错, 
+         但是美中不足的是需要装Python和相应的Request库, 也没法显示平均完成时间
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UserData</title>
+    <style>
+      body {
+        font-family: Minecraftia Regular;
+        color: white;
+      }
+
+      #average-completion {
+        font-size: 5vh;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+      }
+
+      #elo {
+        font-size: 5vh;
+        position: fixed;
+        bottom: 0;
+        right: 0;
+      }
+
+      #match-list {
+        margin: 0;
+        padding: 0;
+        list-style-type: none;
+      }
+
+      #recent-matches {
+        font-size: 5.4vmin;
+        position: fixed;
+        top: 0;
+        right: 0;
+      }
+
+      #match-list li {
+        text-align: right;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="recent-matches">
+      <ul id="match-list"></ul>
+    </div>
+
+    <div id="average-completion"></div>
+    <div id="elo"></div>
+
+    <script>
+      // 改成你的游戏名
+      const nickname = "Cmeans";
+      // 精度设置，默认保留小数点后3位
+      const decimalPrecision = 3;
+      // 比赛模式，1:休息, 2:排位, 3:私人房, 4:特殊比赛
+      const RANKED_MATCH = 2;
+      // 在页面上展示的比赛最大数目
+      const MAX_LIST_SIZE = 10;
+      // 自动掉分, 这里认为大于本分数就是正常比赛,小于本分数就是平局
+      const DECAYED_MATCH_POINTS = 5;
+      // 颜色常量定义
+      const COLOR_POSITIVE = "#33cc33"; // 绿色，表示正变化
+      const COLOR_NEGATIVE = "#ff4d4d"; // 红色，表示负变化
+
+      let uuid = "";
+      let lastOnline = 0;
+
+      function fetchData() {
+        fetch("https://mcsrranked.com/api/users/" + nickname)
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`Failed to fetch player data. Status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then((data) => {
+            uuid = data.data.uuid;
+            lastOnline = data.data.timestamp.lastOnline;
+            // 当前赛季总完成时间
+            const completionTime =
+              data.data.statistics.season.completionTime.ranked;
+            // 当前赛季总完成次数
+            const completions = data.data.statistics.season.completions.ranked;
+            // 当前赛季平均完成时间
+            const averageCompletionTime = new Date(
+              completionTime / completions
+            );
+            const minutes = averageCompletionTime.getMinutes();
+            const seconds = (
+              averageCompletionTime.getSeconds() +
+              averageCompletionTime.getMilliseconds() / 1000
+            )
+              .toFixed(decimalPrecision)
+              .toString()
+              .padStart(2 + !!decimalPrecision + decimalPrecision, "0");
+            document.getElementById(
+              "average-completion"
+            ).innerText = `AVG: ${minutes}:${seconds}`;
+            document.getElementById(
+              "elo"
+            ).innerText = `${data.data.eloRate} #(${data.data.eloRank})`;
+          })
+          .catch((error) => {
+            console.error("Error fetching player data:", error);
+            document.getElementById("average-completion").innerText = "查询数据失败，可能输入的游戏名有误！";
+            document.getElementById("elo").innerText = "N/A";
+          });
+
+        // 获取玩家比赛数据
+        fetch(
+          `https://mcsrranked.com/api/users/${nickname}/matches?type=${RANKED_MATCH}&count=${MAX_LIST_SIZE}`
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            let eloChanges = [];
+            const match_list = data.data;
+            // 处理 Elo 变化数据
+            match_list.forEach((match) => {
+              if (match.date <= lastOnline) return;
+              match.changes.forEach((change) => {
+                if (change.uuid == uuid && change.change)
+                  eloChanges.push(change.change);
+              });
+            });
+            // 从网站上直接查到的数据是从最新开始的，把数组内容倒置后再显示更加符合直觉
+            eloChanges = eloChanges.reverse();
+            // 更新页面的 Elo 变化列表
+            const matchListElement = document.getElementById("match-list");
+            matchListElement.innerHTML = "";
+            eloChanges.forEach((elo_change) => {
+              const li = document.createElement("li");
+              li.textContent = (elo_change > 0 ? "+" : "") + elo_change;
+
+              // 根据 Elo 变化调整颜色
+              if (elo_change > DECAYED_MATCH_POINTS)
+                li.style.color = COLOR_POSITIVE; 
+              else if (elo_change < -DECAYED_MATCH_POINTS)
+                li.style.color = COLOR_NEGATIVE; 
+
+              matchListElement.appendChild(li);
+            });
+
+            // 计算并显示 Elo 变化总和
+            const totalEloChangeItem = document.createElement("li");
+            const totalEloChange = eloChanges.reduce(
+              (accumulator, currentValue) => accumulator + currentValue,
+              0
+            );
+            totalEloChangeItem.textContent = (totalEloChange > 0 ? "+" : "") + totalEloChange;
+            if (totalEloChange > 0)
+              totalEloChangeItem.style.color = COLOR_POSITIVE; 
+            else if (totalEloChange < 0)
+              totalEloChangeItem.style.color = COLOR_NEGATIVE;
+
+            totalEloChangeItem.style.borderTop = "5px solid white";
+            matchListElement.appendChild(totalEloChangeItem);
+          })
+          .catch((error) => {
+            console.error("Error fetching data:", error);
+          });
+      }
+
+      // 初次加载数据
+      fetchData();
+
+      // 每10秒刷新一次数据
+      setInterval(fetchData, 10000);
+    </script>
+  </body>
+</html>
