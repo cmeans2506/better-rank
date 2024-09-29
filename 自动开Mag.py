@@ -13,6 +13,10 @@ minecraft_folders = [r"D:\MC\MultiMC\instances\SeedQueue\.minecraft"]
 ranked_instance_name = "Minecraft* 1.16.1 - MCSR Ranked"
 use_auto_recording = True
 
+current_recording_active = False
+
+
+
 def win_endswith(window_title):
     windows = gw.getAllTitles()
     return any(title.endswith(window_title) for title in windows)
@@ -56,12 +60,15 @@ def auto_recording():
     if win_exist(ranked_instance_name):
         is_instance_found = True
         
+    global current_recording_active
     if is_instance_found:
-        if not obs.obs_frontend_recording_active():
+        if not current_recording_active:
             obs.obs_frontend_recording_start()
+            current_recording_active = True
     else:
-        if obs.obs_frontend_recording_active():
+        if current_recording_active:
             obs.obs_frontend_recording_stop()
+            current_recording_active = False
 
 
 def open_mag():
@@ -78,5 +85,7 @@ def open_mag():
 def script_load(settings):
     if use_auto_recording:
         obs.timer_add(auto_recording, 3000)
-    obs.timer_add(open_mag, 500)
+    # 2000指等待2秒，不要调得太低。调得越低，OBS在退出时卡死的概率越大
+    # 恕我能力不足，不知如何修复这个bug
+    obs.timer_add(open_mag, 2000)
 
