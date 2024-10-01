@@ -137,7 +137,7 @@
             match_list.forEach((match) => {
               if (match.date <= lastOnline) return;
               match.changes.forEach((change) => {
-                if (change.uuid == uuid && change.change)
+                if (change.uuid == uuid && change.change != null)
                   eloChanges.push(change.change);
               });
             });
