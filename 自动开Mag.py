@@ -8,6 +8,8 @@
 
 import obspython as obs
 import pygetwindow as gw
+import os
+import time
 
 minecraft_folders = [r"D:\MC\MultiMC\instances\SeedQueue\.minecraft"]
 ranked_instance_name = "Minecraft* 1.16.1 - MCSR Ranked"
@@ -47,11 +49,11 @@ def switch_to_scene(scene_name):
 def auto_recording():
     is_instance_found = False
     for minecraft_folder in minecraft_folders:
+        file_path = minecraft_folder + r"\wpstateout.txt"
         try:
-            with open(minecraft_folder + r"\wpstateout.txt", 'r') as file:
+            with open(file_path, 'r') as file:
                 content = file.read()
-                print(content)
-                if content != "waiting":
+                if not(content == "waiting" and time.time() - os.path.getmtime(file_path) > 10):
                     is_instance_found = True
                     break
         except FileNotFoundError:
